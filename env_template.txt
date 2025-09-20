@@ -1,0 +1,15 @@
+# EOXS Ticket Dragger Configuration
+# Copy this file to .env and fill in your actual values
+
+# EOXS Login Credentials
+EOXS_EMAIL=your-email@example.com
+EOXS_PASSWORD=your-password
+
+# Email Subject (Ticket Title)
+# This will be used as the ticket title to search for and drag
+EMAIL_SUBJECT=Sample Support Request - Login Issues
+
+# Optional: Alternative ticket titles for testing
+# EMAIL_SUBJECT=Password Reset Request
+# EMAIL_SUBJECT=Account Verification Needed
+# EMAIL_SUBJECT=System Access Problem
