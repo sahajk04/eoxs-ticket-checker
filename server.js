@@ -1,5 +1,5 @@
 const express = require('express');
-const EOXSPlaywrightAutomationWithLog = require('./eoxs_playwright_automation_with_log');
+const EOXSTicketChecker = require('./eoxs_ticket_checker');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,20 +11,37 @@ app.use(express.urlencoded({ extended: true }));
 // Health check endpoint
 app.get('/', (req, res) => {
     res.json({
-        status: 'EOXS Automation API is running',
+        status: 'EOXS Ticket Checker API is running',
         version: '1.0.0',
+        description: 'API to check if tickets exist in EOXS system',
         endpoints: {
-            'POST /create-ticket': 'Create a new EOXS ticket with log note',
+            'POST /check-ticket': 'Check if a ticket exists in EOXS system',
             'GET /health': 'Health check endpoint'
         },
         usage: {
             method: 'POST',
-            url: '/create-ticket',
+            url: '/check-ticket',
             body: {
-                subject: 'Ticket title/subject',
-                customer: 'Customer name (optional, defaults to Discount Pipe & Steel)',
-                body: 'Email body content for log note',
-                assignedTo: 'Person to assign to (optional, defaults to Sahaj Katiyar)'
+                subject: 'Ticket title/subject to search for',
+                project: 'Project name (optional, defaults to Test Support)',
+                section: 'Section to search in (optional, defaults to Resolved)'
+            },
+            example: {
+                subject: 'Login Issues - Cannot Access Dashboard',
+                project: 'Test Support',
+                section: 'Resolved'
+            }
+        },
+        response: {
+            success: true,
+            found: true,
+            answer: 'Yes',
+            data: {
+                subject: 'Login Issues - Cannot Access Dashboard',
+                project: 'Test Support',
+                section: 'Resolved',
+                ticketExists: true,
+                timestamp: '2025-09-20T08:00:00.000Z'
             }
         }
     });
@@ -51,158 +68,68 @@ app.get('/debug-env', (req, res) => {
     });
 });
 
-// Main endpoint to create EOXS ticket
-app.post('/create-ticket', async (req, res) => {
+// Ticket checker endpoint - Main functionality
+app.post('/check-ticket', async (req, res) => {
     try {
-        console.log('🎯 Received ticket creation request:', req.body);
+        console.log('🔍 Received ticket check request:', req.body);
         
         const {
-            subject = 'Support Request',
-            customer = 'Discount Pipe & Steel',
-            body = 'Email received from customer',
-            assignedTo = 'Sahaj Katiyar',
-            description = 'this is a task'
+            subject = 'Testing',
+            project = 'Test Support',
+            section = 'Resolved'
         } = req.body;
 
-        // Temporarily hardcode credentials for testing
-        const EOXS_EMAIL = process.env.EOXS_EMAIL || 'sahajkatiyareoxs@gmail.com';
-        const EOXS_PASSWORD = process.env.EOXS_PASSWORD || 'Eoxs12345!';
-
-        // Validate credentials (now using fallback values)
-        if (!EOXS_EMAIL || !EOXS_PASSWORD) {
+        if (!subject) {
             return res.status(400).json({
                 success: false,
-                error: 'EOXS credentials not configured. Please set EOXS_EMAIL and EOXS_PASSWORD environment variables.'
+                error: 'Subject parameter is required'
             });
         }
 
-        // Set environment variables for the automation script
-        process.env.EOXS_EMAIL = EOXS_EMAIL;
-        process.env.EOXS_PASSWORD = EOXS_PASSWORD;
-        process.env.EMAIL_SUBJECT = subject;
-        process.env.EMAIL_CUSTOMER = customer;
-        process.env.EMAIL_BODY = body;
-
-        console.log('🚀 Starting EOXS automation with:', {
+        console.log('🔍 Starting ticket check for:', {
             subject,
-            customer,
-            assignedTo,
-            bodyLength: body.length
+            project,
+            section
         });
 
-        // Create and run automation
-        const automation = new EOXSPlaywrightAutomationWithLog();
-        const result = await automation.run();
+        // Set environment variables for the checker script
+        process.env.EMAIL_SUBJECT = subject;
+        process.env.HEADLESS = 'true';
+        process.env.NODE_ENV = 'production';
 
-        console.log('📊 Automation result:', result);
+        // Create and run checker
+        const checker = new EOXSTicketChecker();
+        const result = await checker.run();
+
+        console.log('📊 Ticket check result:', result);
 
         if (result.success) {
             res.json({
                 success: true,
-                message: 'Ticket created successfully',
+                found: result.found,
+                answer: result.answer,
                 data: {
                     subject,
-                    customer,
-                    assignedTo,
-                    ticketId: result.ticketId,
+                    project,
+                    section,
+                    ticketExists: result.found,
                     timestamp: new Date().toISOString()
                 }
             });
         } else {
             res.status(500).json({
                 success: false,
-                error: result.error || 'Failed to create ticket',
+                error: result.error || 'Failed to check ticket',
                 details: result
             });
         }
 
     } catch (error) {
-        console.error('❌ API Error:', error);
+        console.error('❌ Ticket Check API Error:', error);
         res.status(500).json({
             success: false,
             error: error.message,
             stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
-    }
-});
-
-// Batch ticket creation endpoint
-app.post('/create-tickets-batch', async (req, res) => {
-    try {
-        const { tickets = [] } = req.body;
-        
-        if (!Array.isArray(tickets) || tickets.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'Please provide an array of tickets to create'
-            });
-        }
-
-        if (tickets.length > 5) {
-            return res.status(400).json({
-                success: false,
-                error: 'Maximum 5 tickets can be created in a batch'
-            });
-        }
-
-        console.log(`🎯 Received batch request for ${tickets.length} tickets`);
-
-        const results = [];
-        
-        for (let i = 0; i < tickets.length; i++) {
-            const ticket = tickets[i];
-            console.log(`🔄 Processing ticket ${i + 1}/${tickets.length}:`, ticket.subject);
-            
-            try {
-                // Set environment variables for this ticket
-                process.env.EMAIL_SUBJECT = ticket.subject || 'Support Request';
-                process.env.EMAIL_CUSTOMER = ticket.customer || 'Discount Pipe & Steel';
-                process.env.EMAIL_BODY = ticket.body || 'Email received from customer';
-
-                const automation = new EOXSPlaywrightAutomationWithLog();
-                const result = await automation.run();
-                
-                results.push({
-                    index: i + 1,
-                    subject: ticket.subject,
-                    success: result.success,
-                    ticketId: result.ticketId,
-                    error: result.error
-                });
-
-                // Add delay between tickets to avoid overwhelming the system
-                if (i < tickets.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-
-            } catch (error) {
-                results.push({
-                    index: i + 1,
-                    subject: ticket.subject,
-                    success: false,
-                    error: error.message
-                });
-            }
-        }
-
-        const successCount = results.filter(r => r.success).length;
-        
-        res.json({
-            success: successCount > 0,
-            message: `Processed ${tickets.length} tickets. ${successCount} successful, ${tickets.length - successCount} failed.`,
-            results,
-            summary: {
-                total: tickets.length,
-                successful: successCount,
-                failed: tickets.length - successCount
-            }
-        });
-
-    } catch (error) {
-        console.error('❌ Batch API Error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
         });
     }
 });
@@ -225,17 +152,17 @@ app.use((req, res) => {
         availableEndpoints: [
             'GET /',
             'GET /health',
-            'POST /create-ticket',
-            'POST /create-tickets-batch'
+            'GET /debug-env',
+            'POST /check-ticket'
         ]
     });
 });
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 EOXS Automation API server running on port ${PORT}`);
+    console.log(`🚀 EOXS Ticket Checker API server running on port ${PORT}`);
     console.log(`📍 Health check: http://localhost:${PORT}/health`);
-    console.log(`🎫 Create ticket: POST http://localhost:${PORT}/create-ticket`);
+    console.log(`🔍 Check ticket: POST http://localhost:${PORT}/check-ticket`);
     console.log(`📧 Environment check:`, {
         hasEmail: !!process.env.EOXS_EMAIL,
         hasPassword: !!process.env.EOXS_PASSWORD,
