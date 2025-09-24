@@ -4,6 +4,12 @@ const EOXSTicketChecker = require('./eoxs_ticket_checker');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Hardcode credentials for Railway deployment (temporary fix)
+process.env.EOXS_EMAIL = 'sahajkatiyareoxs@gmail.com';
+process.env.EOXS_PASSWORD = 'Eoxs12345!';
+process.env.HEADLESS = 'true';
+process.env.NODE_ENV = 'production';
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
