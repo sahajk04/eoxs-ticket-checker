@@ -1,12 +1,12 @@
 {
-  "name": "eoxs-ticket-dragger",
+  "name": "eoxs-ticket-checker",
   "version": "1.0.0",
-  "description": "Automated ticket dragging system for EOXS using Playwright",
+  "description": "Automated ticket checker system for EOXS using Playwright",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node eoxs_ticket_dragger.js 'Test Email Subject'",
+    "test": "node eoxs_ticket_checker.js 'Test Ticket Subject'",
     "install-browsers": "npx playwright install chromium",
     "build": "npm install && npx playwright install chromium"
   },
@@ -22,7 +22,8 @@
     "automation",
     "playwright",
     "eoxs",
-    "ticket-management"
+    "ticket-checker",
+    "api"
   ],
   "author": "Your Name",
   "license": "MIT"
