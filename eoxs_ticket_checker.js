@@ -23,7 +23,7 @@ const CONFIG = {
     searchCriteria: {
         projectName: 'Test Support',
         sectionName: 'Resolved',
-        ticketTitle: process.argv[2] || process.env.EMAIL_SUBJECT || 'Testing' // Get from command line or env
+        // ticketTitle and exactMatch will be set at runtime in the constructor
     },
     waitOptions: {
         timeout: 60000,
@@ -41,6 +41,38 @@ class EOXSTicketChecker {
         this.context = null;
         this.page = null;
         this.ticketFound = false;
+        
+        // Set search criteria at runtime from environment variables
+        CONFIG.searchCriteria.ticketTitle = process.argv[2] || process.env.EMAIL_SUBJECT || 'Testing';
+        CONFIG.searchCriteria.exactMatch = process.env.EXACT_MATCH === 'true' || false;
+    }
+
+    /**
+     * Helper function to normalize text for comparison
+     * @param {string} text - Text to normalize
+     * @returns {string} - Normalized text (trimmed, collapsed spaces, lowercase)
+     */
+    normalizeText(text) {
+        return text.trim().replace(/\s+/g, ' ').toLowerCase();
+    }
+
+    /**
+     * Check if text matches the search criteria
+     * @param {string} elementText - Text from the element
+     * @param {string} searchTitle - Title to search for
+     * @returns {boolean} - Whether the text matches
+     */
+    matchesSearch(elementText, searchTitle) {
+        const normalizedElementText = this.normalizeText(elementText);
+        const normalizedSearchTitle = this.normalizeText(searchTitle);
+
+        if (CONFIG.searchCriteria.exactMatch) {
+            // Exact match: full title must match
+            return normalizedElementText === normalizedSearchTitle;
+        } else {
+            // Partial match: title must be contained in element text
+            return normalizedElementText.includes(normalizedSearchTitle);
+        }
     }
 
     async init() {
@@ -384,7 +416,8 @@ class EOXSTicketChecker {
             }
             
             // Search for the ticket title in the resolved section
-            console.log(`🎯 Searching for "${CONFIG.searchCriteria.ticketTitle}"...`);
+            const matchType = CONFIG.searchCriteria.exactMatch ? 'EXACT' : 'PARTIAL';
+            console.log(`🎯 Searching for "${CONFIG.searchCriteria.ticketTitle}" (${matchType} match)...`);
             const searchSelectors = [
                 // Search within resolved section if found
                 ...(resolvedSectionFound ? [
@@ -413,8 +446,8 @@ class EOXSTicketChecker {
                                 const elementText = await element.textContent() || '';
                                 console.log(`🔍 Checking element: "${elementText.trim().substring(0, 100)}..."`);
                                 
-                                // Check if this element contains the search term
-                                if (elementText.toLowerCase().includes(CONFIG.searchCriteria.ticketTitle.toLowerCase())) {
+                                // Check if this element matches the search criteria
+                                if (this.matchesSearch(elementText, CONFIG.searchCriteria.ticketTitle)) {
                                     // Verify this is in the Resolved section if we found one
                                     if (resolvedSectionFound) {
                                         try {
@@ -423,7 +456,7 @@ class EOXSTicketChecker {
                                             if (isInResolvedSection) {
                                                 ticketFound = true;
                                                 foundTicketText = elementText.trim();
-                                                console.log(`✅ Found "Testing" in Resolved section: "${foundTicketText.substring(0, 100)}..."`);
+                                                console.log(`✅ Found "${CONFIG.searchCriteria.ticketTitle}" in Resolved section (${matchType} match): "${foundTicketText.substring(0, 100)}..."`);
                                                 break;
                                             } else {
                                                 console.log(`⚠️ Found "Testing" but not in Resolved section`);
@@ -439,7 +472,7 @@ class EOXSTicketChecker {
                                         // No specific resolved section found, any match is valid
                                         ticketFound = true;
                                         foundTicketText = elementText.trim();
-                                        console.log(`✅ Found "Testing": "${foundTicketText.substring(0, 100)}..."`);
+                                        console.log(`✅ Found "${CONFIG.searchCriteria.ticketTitle}" (${matchType} match): "${foundTicketText.substring(0, 100)}..."`);
                                         break;
                                     }
                                 }
@@ -476,10 +509,10 @@ class EOXSTicketChecker {
             this.ticketFound = ticketFound;
             
             if (ticketFound) {
-                console.log('🎉 RESULT: YES - "Testing" found in Resolved section');
+                console.log(`🎉 RESULT: YES - "${CONFIG.searchCriteria.ticketTitle}" found in Resolved section`);
                 return true;
             } else {
-                console.log('❌ RESULT: NO - "Testing" not found in Resolved section');
+                console.log(`❌ RESULT: NO - "${CONFIG.searchCriteria.ticketTitle}" not found in Resolved section`);
                 return false;
             }
             
@@ -559,6 +592,7 @@ async function main() {
     console.log(`   Project: ${CONFIG.searchCriteria.projectName}`);
     console.log(`   Section: ${CONFIG.searchCriteria.sectionName}`);
     console.log(`   Ticket: ${CONFIG.searchCriteria.ticketTitle}`);
+    console.log(`   Match Type: ${CONFIG.searchCriteria.exactMatch ? 'EXACT' : 'PARTIAL'}`);
     console.log('');
     
     const checker = new EOXSTicketChecker();
@@ -570,11 +604,11 @@ async function main() {
     
     if (result.success) {
         if (result.found) {
-            console.log('🎉 ANSWER: YES - "Testing" found in Resolved section!');
+            console.log(`🎉 ANSWER: YES - "${CONFIG.searchCriteria.ticketTitle}" found in Resolved section!`);
             console.log('✅ Check completed successfully!');
             process.exit(0); // Exit code 0 for "Yes"
         } else {
-            console.log('❌ ANSWER: NO - "Testing" not found in Resolved section');
+            console.log(`❌ ANSWER: NO - "${CONFIG.searchCriteria.ticketTitle}" not found in Resolved section`);
             console.log('✅ Check completed successfully!');
             process.exit(1); // Exit code 1 for "No"
         }
