@@ -30,12 +30,14 @@ app.get('/', (req, res) => {
             body: {
                 subject: 'Ticket title/subject to search for',
                 project: 'Project name (optional, defaults to Test Support)',
-                section: 'Section to search in (optional, defaults to Resolved)'
+                section: 'Section to search in (optional, defaults to Resolved)',
+                exact: 'Boolean - if true, requires exact match; if false/omitted, allows partial matches (default: false)'
             },
             example: {
                 subject: 'Login Issues - Cannot Access Dashboard',
                 project: 'Test Support',
-                section: 'Resolved'
+                section: 'Resolved',
+                exact: false
             }
         },
         response: {
@@ -82,7 +84,8 @@ app.post('/check-ticket', async (req, res) => {
         const {
             subject = 'Testing',
             project = 'Test Support',
-            section = 'Resolved'
+            section = 'Resolved',
+            exact = false
         } = req.body;
 
         if (!subject) {
@@ -95,40 +98,39 @@ app.post('/check-ticket', async (req, res) => {
         console.log('🔍 Starting ticket check for:', {
             subject,
             project,
-            section
+            section,
+            exact
         });
 
-        // Set environment variables for the checker script
+        // Set environment variables for the checker script BEFORE creating the checker
         process.env.EMAIL_SUBJECT = subject;
         process.env.HEADLESS = 'true';
         process.env.NODE_ENV = 'production';
+        process.env.EXACT_MATCH = exact.toString();
 
-        // Create and run checker
+        // Create and run checker (after environment variables are set)
         const checker = new EOXSTicketChecker();
         const result = await checker.run();
 
         console.log('📊 Ticket check result:', result);
 
-        if (result.success) {
-            res.json({
-                success: true,
-                found: result.found,
-                answer: result.answer,
-                data: {
-                    subject,
-                    project,
-                    section,
-                    ticketExists: result.found,
-                    timestamp: new Date().toISOString()
-                }
-            });
-        } else {
-            res.status(500).json({
-                success: false,
-                error: result.error || 'Failed to check ticket',
-                details: result
-            });
-        }
+        // Always return the found status, even if there were errors during navigation
+        // The script can still determine if a ticket exists even if some steps fail
+        res.json({
+            success: result.success,
+            found: result.found,
+            answer: result.answer,
+            data: {
+                subject,
+                project,
+                section,
+                exact,
+                ticketExists: result.found,
+                timestamp: new Date().toISOString()
+            },
+            // Include error details if there were issues, but don't fail the request
+            ...(result.error && { warning: result.error })
+        });
 
     } catch (error) {
         console.error('❌ Ticket Check API Error:', error);
